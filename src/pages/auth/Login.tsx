@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { UtensilsCrossed } from 'lucide-react';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -15,7 +14,6 @@ export function Login() {
   const { signIn, user } = useAuth();
   const { toast } = useToast();
 
-  // Redirect if already logged in
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -43,19 +41,23 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-100 to-yellow-100 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-100 to-yellow-50 p-4">
+      <Card className="w-full max-w-md rounded-2xl shadow-lg hover:shadow-xl transition border border-orange-200/60 bg-gradient-to-br from-white to-orange-50">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-              <UtensilsCrossed className="h-8 w-8 text-white" />
-            </div>
+            <img
+              src="/logokopi.png"
+              alt="Teras Kopi Logo"
+              className="h-24 w-24 object-contain drop-shadow-md"
+            />
           </div>
-          <CardTitle className="text-2xl font-bold">Teras Kopi & Food</CardTitle>
-          <CardDescription>Masuk ke sistem manajemen</CardDescription>
+          <CardTitle className="text-2xl font-bold text-gray-800">Teras Kopi & Food</CardTitle>
+          <CardDescription className="text-gray-500">
+            Masuk ke sistem manajemen
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -77,13 +79,17 @@ export function Login() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg shadow-md"
+              disabled={loading}
+            >
               {loading ? 'Loading...' : 'Masuk'}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm">
+          <div className="mt-6 text-center text-sm text-gray-600">
             Belum punya akun?{' '}
-            <Link to="/auth/register" className="text-primary hover:underline">
+            <Link to="/auth/register" className="text-orange-600 font-medium hover:underline">
               Daftar di sini
             </Link>
           </div>

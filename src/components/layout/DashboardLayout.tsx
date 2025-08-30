@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { AppSidebar } from './Sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { Menu, UtensilsCrossed } from 'lucide-react';
+import { Menu } from 'lucide-react';
 
 export function DashboardLayout() {
   return (
@@ -16,13 +16,14 @@ export function DashboardLayout() {
               <Menu className="h-4 w-4" />
               <span className="sr-only">Toggle sidebar</span>
             </SidebarTrigger>
+            
             <div className="flex items-center space-x-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <UtensilsCrossed className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-sm font-semibold">Teras Kopi</h1>
-              </div>
+              <img 
+                src="/logokopi.png" 
+                alt="Logo Teras Kopi" 
+                className="h-12 w-auto object-contain"
+              />
+              <h1 className="text-sm font-semibold">Teras Kopi</h1>
             </div>
           </header>
           
