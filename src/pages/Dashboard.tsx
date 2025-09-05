@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, ShoppingCart, AlertTriangle, Star } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -13,10 +13,25 @@ interface DashboardStats {
   totalTransactions: number;
 }
 
-interface ChartData {
-  day: string;
+interface SalesData {
+  date: string;
+  sales: number;
+  transactions: number;
+}
+
+interface CategoryData {
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface PopularMenuItem {
+  name: string;
+  quantity: number;
   revenue: number;
 }
+
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#0088fe', '#00c49f'];
 
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -25,9 +40,11 @@ export function Dashboard() {
     netProfit: 0,
     totalTransactions: 0,
   });
-  const [chartData, setChartData] = useState<ChartData[]>([]);
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [salesData, setSalesData] = useState<SalesData[]>([]);
+  const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
+  const [popularMenus, setPopularMenus] = useState<PopularMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -39,43 +56,37 @@ export function Dashboard() {
     try {
       setLoading(true);
       
-      // Fetch revenue from orders
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('total, created_at');
-      
-      if (ordersError) throw ordersError;
+      // Fetch all necessary data in parallel
+      const [ordersResponse, expensesResponse, lowStockResponse, recentOrdersResponse, 
+             orderItemsResponse, menusResponse, categoriesResponse] = await Promise.all([
+        supabase.from('orders').select('total, created_at, payment_method'),
+        supabase.from('expenses').select('amount'),
+        supabase.from('menus').select('name, stock').lt('stock', 5).eq('is_active', true),
+        supabase.from('orders').select('id, total, created_at, payment_method').order('created_at', { ascending: false }).limit(5),
+        supabase.from('order_items').select('menu_id, qty, subtotal'),
+        supabase.from('menus').select('id, name, category_id, price'),
+        supabase.from('categories').select('id, name')
+      ]);
 
-      // Fetch expenses
-      const { data: expenses, error: expensesError } = await supabase
-        .from('expenses')
-        .select('amount');
-      
-      if (expensesError) throw expensesError;
+      if (ordersResponse.error) throw ordersResponse.error;
+      if (expensesResponse.error) throw expensesResponse.error;
+      if (lowStockResponse.error) throw lowStockResponse.error;
+      if (recentOrdersResponse.error) throw recentOrdersResponse.error;
+      if (orderItemsResponse.error) throw orderItemsResponse.error;
+      if (menusResponse.error) throw menusResponse.error;
+      if (categoriesResponse.error) throw categoriesResponse.error;
 
-      // Fetch low stock items
-      const { data: lowStock, error: lowStockError } = await supabase
-        .from('menus')
-        .select('name, stock')
-        .lt('stock', 5)
-        .eq('is_active', true);
-      
-      if (lowStockError) throw lowStockError;
+      const orders = ordersResponse.data || [];
+      const expenses = expensesResponse.data || [];
+      const orderItems = orderItemsResponse.data || [];
+      const menus = menusResponse.data || [];
+      const categories = categoriesResponse.data || [];
 
-      // Fetch recent transactions
-      const { data: recentOrders, error: recentError } = await supabase
-        .from('orders')
-        .select('id, total, created_at, payment_method')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      
-      if (recentError) throw recentError;
-
-      // Calculate stats
-      const totalRevenue = orders?.reduce((sum, order) => sum + Number(order.total), 0) || 0;
-      const totalExpenses = expenses?.reduce((sum, expense) => sum + Number(expense.amount), 0) || 0;
+      // Calculate basic stats
+      const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total), 0);
+      const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
       const netProfit = totalRevenue - totalExpenses;
-      const totalTransactions = orders?.length || 0;
+      const totalTransactions = orders.length;
 
       setStats({
         totalRevenue,
@@ -84,13 +95,95 @@ export function Dashboard() {
         totalTransactions,
       });
 
-      // Generate weekly chart data
-      generateWeeklyChartData(orders || []);
+      // Generate sales data for the last 7 days
+      const today = new Date();
+      const salesChartData: SalesData[] = [];
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        const dayOrders = orders.filter(order => 
+          order.created_at.startsWith(dateStr)
+        );
+        
+        const daySales = dayOrders.reduce((sum, order) => sum + Number(order.total), 0);
+        const dayTransactions = dayOrders.length;
+        
+        salesChartData.push({
+          date: date.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }),
+          sales: daySales,
+          transactions: dayTransactions
+        });
+      }
+      
+      setSalesData(salesChartData);
 
-      setLowStockItems(lowStock || []);
-      setRecentTransactions(recentOrders || []);
+      // Calculate category data for pie chart
+      const categoryStats: { [key: string]: { name: string; value: number } } = {};
+      
+      categories.forEach(category => {
+        categoryStats[category.id] = {
+          name: category.name,
+          value: 0
+        };
+      });
+
+      // Add "Tanpa Kategori" for items without category
+      categoryStats['no-category'] = {
+        name: 'Tanpa Kategori',
+        value: 0
+      };
+
+      orderItems.forEach(item => {
+        const menu = menus.find(m => m.id === item.menu_id);
+        if (menu) {
+          const categoryId = menu.category_id || 'no-category';
+          if (categoryStats[categoryId]) {
+            categoryStats[categoryId].value += item.subtotal;
+          }
+        }
+      });
+
+      const categoryChartData: CategoryData[] = Object.values(categoryStats)
+        .filter(cat => cat.value > 0)
+        .map((cat, index) => ({
+          name: cat.name,
+          value: cat.value,
+          color: COLORS[index % COLORS.length]
+        }));
+
+      setCategoryData(categoryChartData);
+
+      // Calculate popular menu items
+      const menuStats: { [key: string]: { name: string; quantity: number; revenue: number } } = {};
+      
+      orderItems.forEach(item => {
+        const menu = menus.find(m => m.id === item.menu_id);
+        if (menu) {
+          if (!menuStats[item.menu_id]) {
+            menuStats[item.menu_id] = {
+              name: menu.name,
+              quantity: 0,
+              revenue: 0
+            };
+          }
+          menuStats[item.menu_id].quantity += item.qty;
+          menuStats[item.menu_id].revenue += item.subtotal;
+        }
+      });
+
+      const popularMenuData = Object.values(menuStats)
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+
+      setPopularMenus(popularMenuData);
+      setLowStockItems(lowStockResponse.data || []);
+      setRecentTransactions(recentOrdersResponse.data || []);
       
     } catch (error: any) {
+      console.error('Dashboard fetch error:', error);
       toast({
         title: 'Error',
         description: error.message,
@@ -99,35 +192,6 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateWeeklyChartData = (orders: any[]) => {
-    const now = new Date();
-    const weekData: ChartData[] = [];
-
-    // Generate data for last 7 days
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      const dayStart = new Date(date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(date);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      const dayOrders = orders.filter(order => {
-        const orderDate = new Date(order.created_at);
-        return orderDate >= dayStart && orderDate <= dayEnd;
-      });
-
-      const dayRevenue = dayOrders.reduce((sum, order) => sum + Number(order.total), 0);
-
-      weekData.push({
-        day: date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' }),
-        revenue: dayRevenue
-      });
-    }
-
-    setChartData(weekData);
   };
 
   const formatCurrency = (amount: number) => {
@@ -200,7 +264,7 @@ export function Dashboard() {
 
       {/* Charts and Tables */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Weekly Sales Chart */}
+        {/* Sales Chart */}
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -209,24 +273,34 @@ export function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip 
-                  formatter={(value) => [formatCurrency(Number(value)), 'Revenue']}
-                  labelFormatter={(label) => `Hari: ${label}`}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="#f59e0b" 
-                  strokeWidth={3}
-                  dot={{ fill: '#f59e0b', strokeWidth: 2, r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : salesData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={salesData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                  <Tooltip 
+                    formatter={(value: number, name: string) => [
+                      name === 'sales' ? formatCurrency(value) : value,
+                      name === 'sales' ? 'Penjualan' : 'Transaksi'
+                    ]}
+                  />
+                  <Line type="monotone" dataKey="sales" stroke="#8884d8" strokeWidth={2} name="sales" />
+                  <Line type="monotone" dataKey="transactions" stroke="#82ca9d" strokeWidth={2} name="transactions" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <div className="text-center">
+                  <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Belum ada data penjualan</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -235,11 +309,38 @@ export function Dashboard() {
           <CardHeader>
             <CardTitle>Perbandingan Kategori</CardTitle>
           </CardHeader>
-          <CardContent className="flex items-center justify-center h-64 text-muted-foreground">
-            <div className="text-center">
-              <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Belum ada data kategori</p>
-            </div>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : categoryData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {categoryData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatCurrency(value as number)} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <div className="text-center">
+                  <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Belum ada data kategori</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -248,11 +349,38 @@ export function Dashboard() {
           <CardHeader>
             <CardTitle>Menu Terlaris</CardTitle>
           </CardHeader>
-          <CardContent className="flex items-center justify-center h-64 text-muted-foreground">
-            <div className="text-center">
-              <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Belum ada data penjualan</p>
-            </div>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : popularMenus.length > 0 ? (
+              <div className="space-y-3">
+                {popularMenus.map((menu, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium">{menu.name}</p>
+                        <p className="text-sm text-muted-foreground">{menu.quantity} terjual</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium text-sm">{formatCurrency(menu.revenue)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <div className="text-center">
+                  <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Belum ada data penjualan</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

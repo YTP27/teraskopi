@@ -7,11 +7,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, UtensilsCrossed } from 'lucide-react';
+import { Plus, Edit, Trash2, UtensilsCrossed, Search, Filter, X, MoreHorizontal } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface MenuItem {
   id: string;
@@ -55,7 +57,10 @@ export function MenuManagement() {
     is_active: true,
     image_url: '',
   });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     fetchData();
@@ -226,231 +231,395 @@ export function MenuManagement() {
     return category ? category.name : '-';
   };
 
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Manajemen Menu</h1>
-          <p className="text-muted-foreground">Kelola menu makanan dan minuman</p>
-        </div>
-        <Button onClick={openAddDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Tambah Menu
-        </Button>
+  const filteredMenus = menus.filter((menu) => {
+    const matchesSearch = menu.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || menu.category_id === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const MenuFormComponent = ({ onClose }: { onClose: () => void }) => (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="name">Nama Menu *</Label>
+        <Input
+          id="name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          placeholder="Contoh: Nasi Goreng Special"
+          required
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UtensilsCrossed className="h-5 w-5" />
-            Daftar Menu
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-              <p className="mt-2 text-muted-foreground">Memuat data...</p>
+      <div className="space-y-2">
+        <Label htmlFor="description">Deskripsi</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          placeholder="Deskripsi singkat tentang menu"
+          rows={3}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="price">Harga *</Label>
+          <Input
+            id="price"
+            type="number"
+            value={formData.price}
+            onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+            placeholder="25000"
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="stock">Stok *</Label>
+          <Input
+            id="stock"
+            type="number"
+            value={formData.stock}
+            onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+            placeholder="10"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="category">Kategori</Label>
+        <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
+          <SelectTrigger>
+            <SelectValue placeholder="Pilih kategori" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Tidak ada kategori</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="image_url">URL Gambar</Label>
+        <Input
+          id="image_url"
+          value={formData.image_url}
+          onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+          placeholder="https://example.com/image.jpg"
+        />
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Switch
+          id="is_active"
+          checked={formData.is_active}
+          onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+        />
+        <Label htmlFor="is_active">Menu aktif</Label>
+      </div>
+
+      <div className="flex gap-2 pt-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+          className="flex-1"
+        >
+          Batal
+        </Button>
+        <Button type="submit" disabled={loading} className="flex-1">
+          {loading ? 'Menyimpan...' : editingMenu ? 'Perbarui' : 'Tambah'}
+        </Button>
+      </div>
+    </form>
+  );
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Mobile Header */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-xl font-bold">Manajemen Menu</h1>
+              <p className="text-sm text-muted-foreground">Kelola menu makanan dan minuman</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Gambar</TableHead>
-                    <TableHead>Nama</TableHead>
-                    <TableHead>Kategori</TableHead>
-                    <TableHead>Harga</TableHead>
-                    <TableHead>Stok</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {menus.map((menu) => (
-                    <TableRow key={menu.id}>
-                      <TableCell>
+            {isMobile ? (
+              <Drawer open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DrawerTrigger asChild>
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Tambah
+                  </Button>
+                </DrawerTrigger>
+                <DrawerContent>
+                  <DrawerHeader>
+                    <DrawerTitle>
+                      {editingMenu ? 'Edit Menu' : 'Tambah Menu Baru'}
+                    </DrawerTitle>
+                    <DrawerDescription>
+                      {editingMenu ? 'Perbarui informasi menu' : 'Tambahkan menu baru ke sistem'}
+                    </DrawerDescription>
+                  </DrawerHeader>
+                  <div className="px-4 pb-4">
+                    <MenuFormComponent onClose={() => setDialogOpen(false)} />
+                  </div>
+                </DrawerContent>
+              </Drawer>
+            ) : (
+              <Button onClick={openAddDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Tambah Menu
+              </Button>
+            )}
+          </div>
+
+          {/* Search and Filter */}
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Cari menu..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="Semua kategori" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Kategori</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-4 pb-20">
+        {loading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-muted-foreground">Memuat data...</p>
+          </div>
+        ) : isMobile ? (
+          /* Mobile Card View */
+          <div className="space-y-4">
+            {filteredMenus.length > 0 ? (
+              filteredMenus.map((menu) => (
+                <Card key={menu.id} className="overflow-hidden shadow-sm border-0">
+                  <CardContent className="p-4">
+                    <div className="flex gap-4">
+                      {/* Image */}
+                      <div className="flex-shrink-0">
                         {menu.image_url ? (
                           <img
                             src={menu.image_url}
                             alt={menu.name}
-                            className="h-12 w-12 rounded-lg object-cover"
+                            className="h-16 w-16 rounded-lg object-cover"
                           />
                         ) : (
-                          <div className="h-12 w-12 bg-muted rounded-lg flex items-center justify-center">
-                            <UtensilsCrossed className="h-6 w-6 text-muted-foreground" />
+                          <div className="h-16 w-16 bg-muted rounded-lg flex items-center justify-center">
+                            <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
                           </div>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{menu.name}</p>
-                          {menu.description && (
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-lg truncate">{menu.name}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {menu.description.length > 50
-                                ? menu.description.substring(0, 50) + '...'
-                                : menu.description}
+                              {getCategoryName(menu.category_id || '')}
                             </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{getCategoryName(menu.category_id || '')}</TableCell>
-                      <TableCell>{formatCurrency(menu.price)}</TableCell>
-                      <TableCell>
-                        <Badge variant={menu.stock > 10 ? 'default' : menu.stock > 0 ? 'secondary' : 'destructive'}>
-                          {menu.stock}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={menu.is_active ? 'default' : 'secondary'}>
-                          {menu.is_active ? 'Aktif' : 'Tidak Aktif'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
+                          </div>
                           <Button
+                            variant="ghost"
                             size="sm"
-                            variant="outline"
                             onClick={() => openEditDialog(menu)}
+                            className="ml-2 flex-shrink-0"
                           >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDelete(menu)}
-                          >
-                            <Trash2 className="h-4 w-4" />
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </div>
-                      </TableCell>
+
+                        {menu.description && (
+                          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                            {menu.description}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-bold text-primary">
+                              {formatCurrency(menu.price)}
+                            </span>
+                            <Badge variant={menu.stock > 10 ? 'default' : menu.stock > 0 ? 'secondary' : 'destructive'}>
+                              Stok: {menu.stock}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={menu.is_active ? 'default' : 'secondary'}>
+                              {menu.is_active ? 'Aktif' : 'Tidak Aktif'}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDelete(menu)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <UtensilsCrossed className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">
+                  {searchTerm || selectedCategory !== 'all' 
+                    ? 'Tidak ada menu yang sesuai dengan filter'
+                    : 'Belum ada menu yang ditambahkan'
+                  }
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Desktop Table View */
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UtensilsCrossed className="h-5 w-5" />
+                Daftar Menu
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Gambar</TableHead>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead>Harga</TableHead>
+                      <TableHead>Stok</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Aksi</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMenus.map((menu) => (
+                      <TableRow key={menu.id}>
+                        <TableCell>
+                          {menu.image_url ? (
+                            <img
+                              src={menu.image_url}
+                              alt={menu.name}
+                              className="h-12 w-12 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="h-12 w-12 bg-muted rounded-lg flex items-center justify-center">
+                              <UtensilsCrossed className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{menu.name}</p>
+                            {menu.description && (
+                              <p className="text-sm text-muted-foreground">
+                                {menu.description.length > 50
+                                  ? menu.description.substring(0, 50) + '...'
+                                  : menu.description}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{getCategoryName(menu.category_id || '')}</TableCell>
+                        <TableCell>{formatCurrency(menu.price)}</TableCell>
+                        <TableCell>
+                          <Badge variant={menu.stock > 10 ? 'default' : menu.stock > 0 ? 'secondary' : 'destructive'}>
+                            {menu.stock}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={menu.is_active ? 'default' : 'secondary'}>
+                            {menu.is_active ? 'Aktif' : 'Tidak Aktif'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditDialog(menu)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDelete(menu)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
 
-              {menus.length === 0 && (
-                <div className="text-center py-8">
-                  <UtensilsCrossed className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">Belum ada menu yang ditambahkan</p>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingMenu ? 'Edit Menu' : 'Tambah Menu Baru'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingMenu ? 'Perbarui informasi menu' : 'Tambahkan menu baru ke sistem'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nama Menu *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Contoh: Nasi Goreng Special"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Deskripsi</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Deskripsi singkat tentang menu"
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="price">Harga *</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  placeholder="25000"
-                  required
-                />
+                {filteredMenus.length === 0 && (
+                  <div className="text-center py-8">
+                    <UtensilsCrossed className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      {searchTerm || selectedCategory !== 'all' 
+                        ? 'Tidak ada menu yang sesuai dengan filter'
+                        : 'Belum ada menu yang ditambahkan'
+                      }
+                    </p>
+                  </div>
+                )}
               </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="stock">Stok *</Label>
-                <Input
-                  id="stock"
-                  type="number"
-                  value={formData.stock}
-                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                  placeholder="10"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="category">Kategori</Label>
-              <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih kategori" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Tidak ada kategori</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="image_url">URL Gambar</Label>
-              <Input
-                id="image_url"
-                value={formData.image_url}
-                onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                placeholder="https://example.com/image.jpg"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-              />
-              <Label htmlFor="is_active">Menu aktif</Label>
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-              >
-                Batal
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? 'Menyimpan...' : editingMenu ? 'Perbarui' : 'Tambah'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Desktop Dialog */}
+      {!isMobile && (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {editingMenu ? 'Edit Menu' : 'Tambah Menu Baru'}
+              </DialogTitle>
+              <DialogDescription>
+                {editingMenu ? 'Perbarui informasi menu' : 'Tambahkan menu baru ke sistem'}
+              </DialogDescription>
+            </DialogHeader>
+            <MenuFormComponent onClose={() => setDialogOpen(false)} />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
