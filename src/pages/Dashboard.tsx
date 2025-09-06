@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RefreshCw, TrendingUp, TrendingDown, DollarSign, ShoppingCart, AlertTriangle, Star } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -46,11 +47,12 @@ export function Dashboard() {
   const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
   const [popularMenus, setPopularMenus] = useState<PopularMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chartPeriod, setChartPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const { toast } = useToast();
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [chartPeriod]);
 
   const fetchDashboardData = async () => {
     try {
@@ -95,27 +97,52 @@ export function Dashboard() {
         totalTransactions,
       });
 
-      // Generate sales data for the last 7 days
+      // Generate sales data based on selected period
       const today = new Date();
       const salesChartData: SalesData[] = [];
       
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        
-        const dayOrders = orders.filter(order => 
-          order.created_at.startsWith(dateStr)
-        );
-        
-        const daySales = dayOrders.reduce((sum, order) => sum + Number(order.total), 0);
-        const dayTransactions = dayOrders.length;
-        
-        salesChartData.push({
-          date: date.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }),
-          sales: daySales,
-          transactions: dayTransactions
-        });
+      if (chartPeriod === 'weekly') {
+        // Last 7 days
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = date.toISOString().split('T')[0];
+          
+          const dayOrders = orders.filter(order => 
+            order.created_at.startsWith(dateStr)
+          );
+          
+          const daySales = dayOrders.reduce((sum, order) => sum + Number(order.total), 0);
+          const dayTransactions = dayOrders.length;
+          
+          salesChartData.push({
+            date: date.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }),
+            sales: daySales,
+            transactions: dayTransactions
+          });
+        }
+      } else {
+        // Last 6 months
+        for (let i = 5; i >= 0; i--) {
+          const date = new Date(today);
+          date.setMonth(date.getMonth() - i);
+          const year = date.getFullYear();
+          const month = date.getMonth() + 1;
+          
+          const monthOrders = orders.filter(order => {
+            const orderDate = new Date(order.created_at);
+            return orderDate.getFullYear() === year && orderDate.getMonth() + 1 === month;
+          });
+          
+          const monthSales = monthOrders.reduce((sum, order) => sum + Number(order.total), 0);
+          const monthTransactions = monthOrders.length;
+          
+          salesChartData.push({
+            date: date.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' }),
+            sales: monthSales,
+            transactions: monthTransactions
+          });
+        }
       }
       
       setSalesData(salesChartData);
@@ -267,10 +294,21 @@ export function Dashboard() {
         {/* Sales Chart */}
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Grafik Penjualan Mingguan
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Grafik Penjualan {chartPeriod === 'weekly' ? 'Mingguan' : 'Bulanan'}
+              </CardTitle>
+              <Select value={chartPeriod} onValueChange={(value: 'weekly' | 'monthly') => setChartPeriod(value)}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Mingguan</SelectItem>
+                  <SelectItem value="monthly">Bulanan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -289,8 +327,8 @@ export function Dashboard() {
                       name === 'sales' ? 'Penjualan' : 'Transaksi'
                     ]}
                   />
-                  <Line type="monotone" dataKey="sales" stroke="#8884d8" strokeWidth={2} name="sales" />
-                  <Line type="monotone" dataKey="transactions" stroke="#82ca9d" strokeWidth={2} name="transactions" />
+                  <Line type="monotone" dataKey="sales" stroke="hsl(var(--success))" strokeWidth={2} name="sales" />
+                  <Line type="monotone" dataKey="transactions" stroke="hsl(var(--warning))" strokeWidth={2} name="transactions" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (

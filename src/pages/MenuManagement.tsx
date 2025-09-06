@@ -237,6 +237,28 @@ export function MenuManagement() {
     return matchesSearch && matchesCategory;
   });
 
+  // Group menus by category and sort alphabetically
+  const groupedMenus = () => {
+    if (selectedCategory !== 'all') {
+      // If specific category is selected, return sorted menus without grouping
+      return filteredMenus.sort((a, b) => a.name.localeCompare(b.name, 'id'));
+    }
+
+    // Group by category
+    const grouped = categories.reduce((acc, category) => {
+      const categoryMenus = filteredMenus
+        .filter(menu => menu.category_id === category.id)
+        .sort((a, b) => a.name.localeCompare(b.name, 'id'));
+      
+      if (categoryMenus.length > 0) {
+        acc[category.name] = categoryMenus;
+      }
+      return acc;
+    }, {} as Record<string, MenuItem[]>);
+
+    return grouped;
+  };
+
   const MenuFormComponent = ({ onClose }: { onClose: () => void }) => (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
@@ -416,80 +438,8 @@ export function MenuManagement() {
           </div>
         ) : isMobile ? (
           /* Mobile Card View */
-          <div className="space-y-4">
-            {filteredMenus.length > 0 ? (
-              filteredMenus.map((menu) => (
-                <Card key={menu.id} className="overflow-hidden shadow-sm border-0">
-                  <CardContent className="p-4">
-                    <div className="flex gap-4">
-                      {/* Image */}
-                      <div className="flex-shrink-0">
-                        {menu.image_url ? (
-                          <img
-                            src={menu.image_url}
-                            alt={menu.name}
-                            className="h-16 w-16 rounded-lg object-cover"
-                          />
-                        ) : (
-                          <div className="h-16 w-16 bg-muted rounded-lg flex items-center justify-center">
-                            <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-lg truncate">{menu.name}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {getCategoryName(menu.category_id || '')}
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditDialog(menu)}
-                            className="ml-2 flex-shrink-0"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        {menu.description && (
-                          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                            {menu.description}
-                          </p>
-                        )}
-
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg font-bold text-primary">
-                              {formatCurrency(menu.price)}
-                            </span>
-                            <Badge variant={menu.stock > 10 ? 'default' : menu.stock > 0 ? 'secondary' : 'destructive'}>
-                              Stok: {menu.stock}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={menu.is_active ? 'default' : 'secondary'}>
-                              {menu.is_active ? 'Aktif' : 'Tidak Aktif'}
-                            </Badge>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDelete(menu)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
+          <div className="space-y-6">
+            {filteredMenus.length === 0 ? (
               <div className="text-center py-8">
                 <UtensilsCrossed className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
@@ -498,6 +448,173 @@ export function MenuManagement() {
                     : 'Belum ada menu yang ditambahkan'
                   }
                 </p>
+              </div>
+            ) : selectedCategory !== 'all' ? (
+              // Single category view
+              <div className="space-y-4">
+                {(() => {
+                  const menus = groupedMenus() as MenuItem[];
+                  return menus.map((menu) => (
+                    <Card key={menu.id} className="overflow-hidden shadow-sm border-0">
+                      <CardContent className="p-4">
+                        <div className="flex gap-4">
+                          {/* Image */}
+                          <div className="flex-shrink-0">
+                            {menu.image_url ? (
+                              <img
+                                src={menu.image_url}
+                                alt={menu.name}
+                                className="h-16 w-16 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className="h-16 w-16 bg-muted rounded-lg flex items-center justify-center">
+                                <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-lg truncate">{menu.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  {getCategoryName(menu.category_id || '')}
+                                </p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditDialog(menu)}
+                                className="ml-2 flex-shrink-0"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {menu.description && (
+                              <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                                {menu.description}
+                              </p>
+                            )}
+
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg font-bold text-primary">
+                                  {formatCurrency(menu.price)}
+                                </span>
+                                <Badge variant={menu.stock > 10 ? 'default' : menu.stock > 0 ? 'secondary' : 'destructive'}>
+                                  Stok: {menu.stock}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={menu.is_active ? 'default' : 'secondary'}>
+                                  {menu.is_active ? 'Aktif' : 'Tidak Aktif'}
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDelete(menu)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ));
+                })()}
+              </div>
+            ) : (
+              // All categories view with sections
+              <div className="space-y-6">
+                {(() => {
+                  const grouped = groupedMenus() as Record<string, MenuItem[]>;
+                  return Object.entries(grouped).map(([categoryName, menus]) => (
+                    <div key={categoryName} className="space-y-3">
+                      {/* Category Header */}
+                      <div className="sticky top-28 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-2">
+                        <h2 className="text-lg font-bold text-foreground border-l-4 border-primary pl-3">
+                          {categoryName}
+                        </h2>
+                      </div>
+                      
+                      {/* Category Menu Items */}
+                      <div className="space-y-4">
+                        {menus.map((menu) => (
+                          <Card key={menu.id} className="overflow-hidden shadow-sm border-0">
+                            <CardContent className="p-4">
+                              <div className="flex gap-4">
+                                {/* Image */}
+                                <div className="flex-shrink-0">
+                                  {menu.image_url ? (
+                                    <img
+                                      src={menu.image_url}
+                                      alt={menu.name}
+                                      className="h-16 w-16 rounded-lg object-cover"
+                                    />
+                                  ) : (
+                                    <div className="h-16 w-16 bg-muted rounded-lg flex items-center justify-center">
+                                      <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1 min-w-0">
+                                      <h3 className="font-semibold text-lg truncate">{menu.name}</h3>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openEditDialog(menu)}
+                                      className="ml-2 flex-shrink-0"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+
+                                  {menu.description && (
+                                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                                      {menu.description}
+                                    </p>
+                                  )}
+
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-lg font-bold text-primary">
+                                        {formatCurrency(menu.price)}
+                                      </span>
+                                      <Badge variant={menu.stock > 10 ? 'default' : menu.stock > 0 ? 'secondary' : 'destructive'}>
+                                        Stok: {menu.stock}
+                                      </Badge>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant={menu.is_active ? 'default' : 'secondary'}>
+                                        {menu.is_active ? 'Aktif' : 'Tidak Aktif'}
+                                      </Badge>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => handleDelete(menu)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
             )}
           </div>
@@ -525,7 +642,11 @@ export function MenuManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredMenus.map((menu) => (
+                    {(() => {
+                      const sortedMenus = selectedCategory !== 'all' 
+                        ? (groupedMenus() as MenuItem[])
+                        : filteredMenus.sort((a, b) => a.name.localeCompare(b.name, 'id'));
+                      return sortedMenus.map((menu) => (
                       <TableRow key={menu.id}>
                         <TableCell>
                           {menu.image_url ? (
@@ -582,9 +703,10 @@ export function MenuManagement() {
                             </Button>
                           </div>
                         </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
+                       </TableRow>
+                     ));
+                   })()}
+                   </TableBody>
                 </Table>
 
                 {filteredMenus.length === 0 && (

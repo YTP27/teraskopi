@@ -557,11 +557,11 @@ export function POS() {
         </div>
       )}
 
-      {/* Cart Drawer */}
+      {/* Cart Drawer - Full Screen on Mobile */}
       {showCartDrawer && (
         <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setShowCartDrawer(false)}>
           <div 
-            className="fixed bottom-0 left-0 right-0 bg-background rounded-t-lg h-[80vh] flex flex-col"
+            className="fixed inset-0 bg-background md:bottom-0 md:left-0 md:right-0 md:rounded-t-lg md:h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Cart Header */}
